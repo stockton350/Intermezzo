@@ -244,6 +244,14 @@ html, body {
 .sq.dk { background: var(--dk-sq); }
 .sq.hf  { background: var(--hl-from) !important; }
 .sq.ht  { background: var(--hl-to)   !important; }
+.coord {
+  position: absolute; font-size: 9px; font-weight: 700;
+  line-height: 1; pointer-events: none; opacity: .75;
+}
+.coord-rank { top: 2px; left: 3px; }
+.coord-file { bottom: 2px; right: 3px; }
+.sq.lt .coord { color: #7a5c2a; }
+.sq.dk .coord { color: #c8dff5; }
 .piece {
   font-size: min(10vw, 54px);
   line-height: 1;
@@ -576,7 +584,22 @@ Return ONLY a valid JSON object (no markdown fences, no extra text) with this ex
 
 RULES FOR MOVE COMMENTS:
 - One per half-move, exactly ${total} total, in order
-- Comments are spoken aloud while watching the board — keep them SHORT (1-2 sentences max)
+- Comments are spoken aloud by a TTS engine — write ONLY natural spoken English, never chess symbols or abbreviations
+- PIECE NAMES: always write the full piece name — "King", "Queen", "Rook", "Bishop", "Knight", "pawn" — never K, Q, R, B, N
+- SQUARES: say the square name as-is, e.g. "e4", "d5", "h7" (these are fine spoken)
+- NOTATION SYMBOLS — replace every symbol with its spoken word:
+    x or X  → "takes"
+    +       → "check"
+    #       → "checkmate"
+    !       → "good move"
+    !!      → "brilliant move"
+    ?       → "mistake"
+    ??      → "blunder"
+    !?      → "interesting move"
+    ?!      → "dubious move"
+    O-O     → "castles kingside"
+    O-O-O   → "castles queenside"
+    =Q/=R/=B/=N → "promotes to Queen / Rook / Bishop / Knight"
 - Sound human: use phrases like "nice idea here", "oof, this is where things unravel", "clever — puts real pressure on", "both sides are just going for it"
 - Point out PATTERNS when you see them: repeated weaknesses, a tendency to trade pieces early, time pressure decisions, etc.
 - Occasional dry humor or personality is welcome — don't be bland
@@ -747,6 +770,19 @@ function renderBoard() {
         sp.className = 'piece ' + piece.color;
         sp.textContent = PC[piece.color + piece.type];
         div.appendChild(sp);
+      }
+
+      if (vc === 0) {
+        const r = document.createElement('span');
+        r.className = 'coord coord-rank';
+        r.textContent = sqName[1];
+        div.appendChild(r);
+      }
+      if (vr === 7) {
+        const f = document.createElement('span');
+        f.className = 'coord coord-file';
+        f.textContent = sqName[0];
+        div.appendChild(f);
       }
 
       el.appendChild(div);

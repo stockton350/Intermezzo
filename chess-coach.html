@@ -292,11 +292,11 @@ html, body {
 <!-- SETTINGS -->
 <div id="s-settings" class="screen">
   <div class="logo">Chess Coach</div>
-  <div class="logo-sub">Claude + Kokoro</div>
+  <div class="logo-sub">DeepSeek + Kokoro</div>
 
   <div class="field">
-    <label>Anthropic API Key</label>
-    <input type="password" id="f-ant" class="finput" placeholder="sk-ant-api03-…">
+    <label>DeepSeek API Key</label>
+    <input type="password" id="f-ds" class="finput" placeholder="sk-…">
   </div>
   <div class="field">
     <label>OpenRouter Key <span style="color:var(--muted);font-size:9px;letter-spacing:0">(for Kokoro TTS)</span></label>
@@ -367,7 +367,7 @@ html, body {
 //  STATE
 // ─────────────────────────────────────────
 const S = {
-  antKey: '', orKey: '', username: '', tone: 'club',
+  dsKey: '', orKey: '', username: '', tone: 'club',
   games: [],
   // per-game
   positions: [], hist: [], analysis: null,
@@ -417,18 +417,18 @@ pv('.tone').forEach(b => {
 });
 
 $('btn-save').onclick = () => {
-  const ak = $('f-ant').value.trim();
+  const dk = $('f-ds').value.trim();
   const ok = $('f-or').value.trim();
   const un = $('f-user').value.trim();
-  if (!ak) return toast('Anthropic API key is required.');
+  if (!dk) return toast('DeepSeek API key is required.');
   if (!un) return toast('Enter your chess username.');
-  S.antKey = ak; S.orKey = ok; S.username = un;
+  S.dsKey = dk; S.orKey = ok; S.username = un;
   show('s-home');
   refreshHome();
 };
 
 $('btn-tosettings').onclick = () => {
-  $('f-ant').value  = S.antKey;
+  $('f-ds').value   = S.dsKey;
   $('f-or').value   = S.orKey;
   $('f-user').value = S.username;
   // restore tone button
@@ -486,7 +486,7 @@ $('btn-exit').onclick = () => {
 };
 
 // ─────────────────────────────────────────
-//  CLAUDE API — ANALYSIS
+//  DEEPSEEK API — ANALYSIS
 // ─────────────────────────────────────────
 async function fetchAnalysis(pgn) {
   const toneMap = {
@@ -507,7 +507,7 @@ async function fetchAnalysis(pgn) {
   const total = c.history().length;
 
   const body = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'deepseek-chat',
     max_tokens: 4096,
     messages: [{
       role: 'user',
@@ -537,13 +537,11 @@ STRICT RULES:
     }]
   };
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': S.antKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      'Authorization': `Bearer ${S.dsKey}`
     },
     body: JSON.stringify(body)
   });
@@ -554,7 +552,7 @@ STRICT RULES:
   }
 
   const data = await res.json();
-  const raw  = data.content[0].text.trim()
+  const raw  = data.choices[0].message.content.trim()
     .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
 
   let parsed;
@@ -571,23 +569,21 @@ STRICT RULES:
 }
 
 // ─────────────────────────────────────────
-//  CLAUDE API — PROFILE
+//  DEEPSEEK API — PROFILE
 // ─────────────────────────────────────────
 async function fetchProfile() {
   const notes = S.games
     .map((g, i) => `Game ${i + 1}: ${g.analysis.profile}`)
     .join('\n\n');
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': S.antKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      'Authorization': `Bearer ${S.dsKey}`
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'deepseek-chat',
       max_tokens: 512,
       messages: [{
         role: 'user',
@@ -608,7 +604,7 @@ ${notes}`
   }
 
   const data = await res.json();
-  return data.content[0].text.trim();
+  return data.choices[0].message.content.trim();
 }
 
 // ─────────────────────────────────────────

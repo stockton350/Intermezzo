@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chess Coach</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:       #0d0f17;
+  --card:     #161925;
+  --border:   #252a3a;
+  --text:     #e4e8f0;
+  --muted:    #6b7291;
+  --accent:   #5b8fd4;
+  --gold:     #f0a030;
+  --lt-sq:    #efdfc0;
+  --dk-sq:    #4a7db5;
+  --hl-from:  rgba(245,210,60,0.50);
+  --hl-to:    rgba(245,210,60,0.82);
+}
+
+html, body {
+  height: 100%; width: 100%;
+  font-family: 'Space Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ── SCREENS ── */
+.screen {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+}
+.screen.hidden { display: none; }
+
+/* ── SETTINGS ── */
+#s-settings {
+  padding: max(env(safe-area-inset-top),48px) 24px 32px;
+  overflow-y: auto; gap: 0;
+}
+.logo { font-size: 26px; font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
+.logo-sub {
+  font-size: 10px; color: var(--muted);
+  letter-spacing: 2.5px; text-transform: uppercase;
+  margin-bottom: 44px;
+}
+.field { margin-bottom: 22px; }
+.field > label {
+  display: block; font-size: 10px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.finput {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 13px; outline: none;
+  transition: border-color .2s;
+}
+.finput:focus { border-color: var(--accent); }
+.tone-row { display: flex; gap: 8px; }
+.tone {
+  flex: 1; padding: 12px 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px; color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px; cursor: pointer;
+  transition: all .2s; text-align: center;
+}
+.tone.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.primary {
+  width: 100%; padding: 18px;
+  background: var(--accent); border: none;
+  border-radius: 10px; color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; letter-spacing: .5px;
+  margin-top: 10px;
+  transition: opacity .15s, transform .1s;
+}
+.primary:active { opacity: .85; transform: scale(.99); }
+
+/* ── HOME ── */
+#s-home {
+  padding: max(env(safe-area-inset-top),32px) 24px 24px;
+}
+.home-hdr {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 28px;
+}
+.home-hdr h2 { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+.icon-btn {
+  width: 38px; height: 38px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 50%; color: var(--muted);
+  font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#pgn {
+  width: 100%; flex: 1;
+  min-height: 160px; max-height: 240px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px; color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px; line-height: 1.75;
+  outline: none; resize: none;
+  transition: border-color .2s;
+}
+#pgn:focus { border-color: var(--accent); }
+#pgn::placeholder { color: var(--muted); opacity: .65; }
+#btn-go {
+  width: 100%; padding: 18px;
+  background: var(--accent); border: none;
+  border-radius: 10px; color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; margin-top: 14px;
+  transition: opacity .15s;
+}
+#btn-go:active { opacity: .85; }
+#btn-profile {
+  width: 100%; padding: 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px; color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px; cursor: pointer;
+  margin-top: 10px; transition: all .2s;
+}
+#btn-profile:active { opacity: .7; }
+#gcount {
+  font-size: 11px; color: var(--muted);
+  text-align: center; padding: 14px 0;
+}
+
+/* ── LOADING ── */
+#s-loading {
+  align-items: center; justify-content: center; gap: 22px;
+}
+.spin-ring {
+  width: 42px; height: 42px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#s-loading p {
+  font-size: 11px; color: var(--muted);
+  letter-spacing: 3px; text-transform: uppercase;
+}
+.dots::after {
+  content: '';
+  animation: dotdot 1.5s steps(4,end) infinite;
+}
+@keyframes dotdot {
+  0%   { content: ''; }
+  25%  { content: '.'; }
+  50%  { content: '..'; }
+  75%  { content: '...'; }
+  100% { content: ''; }
+}
+
+/* ── GAME ── */
+#s-game {
+  justify-content: space-between;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.g-top {
+  display: flex; justify-content: space-between;
+  align-items: center; padding: 10px 20px;
+  flex-shrink: 0;
+}
+.pinfo { font-size: 12px; color: var(--muted); min-width: 110px; }
+.pinfo strong { display: block; font-size: 14px; color: var(--text); font-weight: 700; }
+.pinfo.r { text-align: right; }
+#btn-exit {
+  background: none; border: none;
+  color: var(--muted); font-size: 18px;
+  cursor: pointer; padding: 8px;
+}
+.statusbar {
+  height: 22px; flex-shrink: 0;
+  display: flex; align-items: center;
+  justify-content: center; gap: 10px;
+}
+#key-lbl {
+  font-size: 11px; color: var(--gold);
+  font-weight: 700; letter-spacing: 2px;
+  min-width: 20px; text-align: center;
+}
+.audiodot {
+  width: 7px; height: 7px;
+  border-radius: 50%; background: var(--border);
+  transition: background .2s;
+}
+.audiodot.on {
+  background: var(--accent);
+  animation: blink .9s ease-in-out infinite;
+}
+@keyframes blink {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.4; transform:scale(.75); }
+}
+#board-wrap {
+  width: 100%; aspect-ratio: 1/1;
+  flex-shrink: 0; cursor: pointer;
+  user-select: none;
+}
+#board {
+  width: 100%; height: 100%;
+  display: grid;
+  grid-template-columns: repeat(8,1fr);
+  grid-template-rows: repeat(8,1fr);
+}
+.sq {
+  display: flex; align-items: center;
+  justify-content: center; position: relative;
+}
+.sq.lt { background: var(--lt-sq); }
+.sq.dk { background: var(--dk-sq); }
+.sq.hf  { background: var(--hl-from) !important; }
+.sq.ht  { background: var(--hl-to)   !important; }
+.piece {
+  font-size: min(10vw, 54px);
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.piece.w {
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.6);
+}
+.piece.b {
+  color: #0e1118;
+  text-shadow: 0 1px 2px rgba(255,255,255,.15);
+}
+.navbar {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 12px 28px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}
+.nbtn {
+  width: 52px; height: 52px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 50%; color: var(--text);
+  font-size: 20px; cursor: pointer;
+  display: flex; align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  font-family: inherit;
+}
+.nbtn:active { background: var(--border); transform: scale(.94); }
+.nbtn:disabled { opacity: .22; cursor: default; transform: none; }
+#movlbl {
+  font-size: 13px; color: var(--muted);
+  letter-spacing: 1px; min-width: 90px;
+  text-align: center;
+}
+
+/* ── ERROR TOAST ── */
+#toast {
+  position: fixed; bottom: 32px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #c0392b; color: #fff;
+  padding: 12px 20px; border-radius: 8px;
+  font-size: 12px; max-width: 90vw;
+  text-align: center; z-index: 999;
+  transition: transform .3s;
+  pointer-events: none;
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- SETTINGS -->
+<div id="s-settings" class="screen">
+  <div class="logo">Chess Coach</div>
+  <div class="logo-sub">Claude + Kokoro</div>
+
+  <div class="field">
+    <label>Anthropic API Key</label>
+    <input type="password" id="f-ant" class="finput" placeholder="sk-ant-api03-…">
+  </div>
+  <div class="field">
+    <label>OpenRouter Key <span style="color:var(--muted);font-size:9px;letter-spacing:0">(for Kokoro TTS)</span></label>
+    <input type="password" id="f-or" class="finput" placeholder="sk-or-v1-…">
+  </div>
+  <div class="field">
+    <label>Your Chess.com Username</label>
+    <input type="text" id="f-user" class="finput" placeholder="Stockton350">
+  </div>
+  <div class="field">
+    <label>Analysis Tone</label>
+    <div class="tone-row">
+      <button class="tone" data-v="beginner">Beginner</button>
+      <button class="tone on" data-v="club">Club</button>
+      <button class="tone" data-v="advanced">Advanced</button>
+    </div>
+  </div>
+  <button class="primary" id="btn-save">Continue →</button>
+</div>
+
+<!-- HOME -->
+<div id="s-home" class="screen hidden">
+  <div class="home-hdr">
+    <h2>Chess Coach</h2>
+    <button class="icon-btn" id="btn-tosettings">⚙</button>
+  </div>
+  <textarea id="pgn" placeholder="Paste PGN here…&#10;&#10;[Event &quot;Live Chess&quot;]&#10;[White &quot;…&quot;]&#10;[Black &quot;…&quot;]&#10;&#10;1. e4 e5 2. Nf3 …"></textarea>
+  <button id="btn-go">Analyze Game</button>
+  <button id="btn-profile" class="hidden">▶ Hear My Profile</button>
+  <p id="gcount"></p>
+</div>
+
+<!-- LOADING -->
+<div id="s-loading" class="screen hidden">
+  <div class="spin-ring"></div>
+  <p>Analyzing<span class="dots"></span></p>
+</div>
+
+<!-- GAME -->
+<div id="s-game" class="screen hidden">
+  <div class="g-top">
+    <div class="pinfo" id="opp-info"></div>
+    <button id="btn-exit">✕</button>
+    <div class="pinfo r" id="my-info"></div>
+  </div>
+
+  <div class="statusbar">
+    <span id="key-lbl"></span>
+    <div class="audiodot" id="adot"></div>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div class="navbar">
+    <button class="nbtn" id="btn-prev">←</button>
+    <span id="movlbl">START</span>
+    <button class="nbtn" id="btn-next">→</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+// ─────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────
+const S = {
+  antKey: '', orKey: '', username: '', tone: 'club',
+  games: [],
+  // per-game
+  positions: [], hist: [], analysis: null,
+  idx: -1, flip: false, curAudio: null
+};
+
+// ─────────────────────────────────────────
+//  PIECES
+// ─────────────────────────────────────────
+const PC = {
+  wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
+  bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟'
+};
+
+// ─────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const pv = sel => document.querySelectorAll(sel);
+
+function show(id) {
+  pv('.screen').forEach(s => s.classList.add('hidden'));
+  $(id).classList.remove('hidden');
+}
+
+function toast(msg, dur = 3500) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function pgHeader(pgn, tag) {
+  const m = pgn.match(new RegExp(`\\[${tag} "([^"]+)"\\]`));
+  return m ? m[1] : '';
+}
+
+// ─────────────────────────────────────────
+//  SETTINGS
+// ─────────────────────────────────────────
+pv('.tone').forEach(b => {
+  b.onclick = () => {
+    pv('.tone').forEach(t => t.classList.remove('on'));
+    b.classList.add('on');
+    S.tone = b.dataset.v;
+  };
+});
+
+$('btn-save').onclick = () => {
+  const ak = $('f-ant').value.trim();
+  const ok = $('f-or').value.trim();
+  const un = $('f-user').value.trim();
+  if (!ak) return toast('Anthropic API key is required.');
+  if (!un) return toast('Enter your chess username.');
+  S.antKey = ak; S.orKey = ok; S.username = un;
+  show('s-home');
+  refreshHome();
+};
+
+$('btn-tosettings').onclick = () => {
+  $('f-ant').value  = S.antKey;
+  $('f-or').value   = S.orKey;
+  $('f-user').value = S.username;
+  // restore tone button
+  pv('.tone').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === S.tone);
+  });
+  show('s-settings');
+};
+
+// ─────────────────────────────────────────
+//  HOME
+// ─────────────────────────────────────────
+function refreshHome() {
+  const n = S.games.length;
+  $('gcount').textContent = n ? `${n} game${n > 1 ? 's' : ''} analyzed` : '';
+  $('btn-profile').classList.toggle('hidden', n === 0);
+}
+
+$('btn-go').onclick = async () => {
+  const pgn = $('pgn').value.trim();
+  if (!pgn) return toast('Paste a PGN first.');
+  const test = new Chess();
+  if (!test.load_pgn(pgn, { sloppy: true }))
+    return toast('Invalid PGN — check the format.');
+  show('s-loading');
+  try {
+    const analysis = await fetchAnalysis(pgn);
+    loadGame(pgn, analysis);
+    show('s-game');
+  } catch (e) {
+    toast('Analysis failed: ' + e.message);
+    show('s-home');
+  }
+};
+
+$('btn-profile').onclick = async () => {
+  if (!S.games.length) return;
+  show('s-loading');
+  try {
+    const txt = await fetchProfile();
+    show('s-home');
+    refreshHome();
+    speak(txt);
+  } catch (e) {
+    toast('Profile failed: ' + e.message);
+    show('s-home');
+  }
+};
+
+$('btn-exit').onclick = () => {
+  stopAudio();
+  $('pgn').value = '';
+  show('s-home');
+  refreshHome();
+};
+
+// ─────────────────────────────────────────
+//  CLAUDE API — ANALYSIS
+// ─────────────────────────────────────────
+async function fetchAnalysis(pgn) {
+  const toneMap = {
+    beginner: 'simple, encouraging language — avoid technical jargon',
+    club:     'club-player level with standard chess terminology',
+    advanced: 'deep tactical and positional analysis with precise chess vocabulary'
+  };
+
+  const wName = pgHeader(pgn, 'White');
+  const bName = pgHeader(pgn, 'Black');
+  const un    = S.username.toLowerCase();
+  const side  = wName.toLowerCase() === un ? 'White'
+              : bName.toLowerCase() === un ? 'Black'
+              : 'White';
+
+  const c = new Chess();
+  c.load_pgn(pgn, { sloppy: true });
+  const total = c.history().length;
+
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content:
+`You are a chess coach reviewing a game for ${S.username} who played ${side}.
+Use ${toneMap[S.tone]}.
+
+PGN:
+${pgn}
+
+Return ONLY a valid JSON object (no markdown fences, no extra text) with this exact shape:
+{
+  "opening": "Name of the opening",
+  "moves": [
+    { "comment": "1-2 sentence spoken comment for this move, from ${S.username}'s perspective", "isKey": false }
+  ],
+  "conclusion": "2-3 sentence spoken game summary",
+  "profile": "3-4 sentence coaching profile of ${S.username} based on this game"
+}
+
+STRICT RULES:
+- moves array must contain exactly ${total} objects — one per half-move in order
+- Keep every comment SHORT (1-2 sentences) — it will be spoken aloud while watching the board
+- isKey must be boolean true for: blunders, brilliant moves, key sacrifices, major turning points
+- Key-move comments must start with "Key move — "
+- No text whatsoever outside the JSON object`
+    }]
+  };
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': S.antKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const raw  = data.content[0].text.trim()
+    .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch { throw new Error('Bad JSON from API — try again.'); }
+
+  // Normalise moves array length
+  while (parsed.moves.length < total)
+    parsed.moves.push({ comment: '', isKey: false });
+  parsed.moves = parsed.moves.slice(0, total);
+  parsed.moves.forEach(m => { m.isKey = m.isKey === true || m.isKey === 'true'; });
+
+  return parsed;
+}
+
+// ─────────────────────────────────────────
+//  CLAUDE API — PROFILE
+// ─────────────────────────────────────────
+async function fetchProfile() {
+  const notes = S.games
+    .map((g, i) => `Game ${i + 1}: ${g.analysis.profile}`)
+    .join('\n\n');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': S.antKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 512,
+      messages: [{
+        role: 'user',
+        content:
+`Based on these per-game coaching notes for ${S.username}, give a 4-5 sentence spoken coaching profile.
+Identify consistent patterns, genuine strengths, and the top 2 areas to work on.
+Speak directly to them as their coach.
+Return only the spoken text — no formatting, no bullet points.
+
+${notes}`
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.content[0].text.trim();
+}
+
+// ─────────────────────────────────────────
+//  LOAD GAME
+// ─────────────────────────────────────────
+function loadGame(pgn, analysis) {
+  // Build position history
+  const c    = new Chess();
+  c.load_pgn(pgn, { sloppy: true });
+  const hist = c.history({ verbose: true });
+
+  const pos  = [];
+  const tmp  = new Chess();
+  pos.push(tmp.fen());
+  hist.forEach(m => { tmp.move(m.san); pos.push(tmp.fen()); });
+
+  // Player color
+  const wName = pgHeader(pgn, 'White');
+  const bName = pgHeader(pgn, 'Black');
+  const isBlk = bName.toLowerCase() === S.username.toLowerCase();
+
+  S.positions = pos;
+  S.hist      = hist;
+  S.analysis  = analysis;
+  S.idx       = -1;
+  S.flip      = isBlk;
+  S.games.push({ pgn, analysis });
+
+  // Header names / elos
+  const wElo = pgHeader(pgn, 'WhiteElo');
+  const bElo = pgHeader(pgn, 'BlackElo');
+
+  if (!isBlk) {
+    $('my-info').innerHTML  = `<strong>${wName}</strong>${wElo ? `<br>(${wElo})` : ''}`;
+    $('opp-info').innerHTML = `<strong>${bName}</strong>${bElo ? `<br>(${bElo})` : ''}`;
+  } else {
+    $('my-info').innerHTML  = `<strong>${bName}</strong>${bElo ? `<br>(${bElo})` : ''}`;
+    $('opp-info').innerHTML = `<strong>${wName}</strong>${wElo ? `<br>(${wElo})` : ''}`;
+  }
+
+  renderBoard();
+  updateNav();
+  speak(`${analysis.opening}. Tap to begin.`);
+}
+
+// ─────────────────────────────────────────
+//  BOARD RENDER
+// ─────────────────────────────────────────
+const FILES = ['a','b','c','d','e','f','g','h'];
+
+function renderBoard() {
+  const el  = $('board');
+  el.innerHTML = '';
+
+  const fen  = S.positions[S.idx + 1];
+  const c    = new Chess(fen);
+  const ba   = c.board();          // ba[0] = rank-8 row; ba[7] = rank-1 row
+
+  let fromSq = null, toSq = null;
+  if (S.idx >= 0) {
+    fromSq = S.hist[S.idx].from;
+    toSq   = S.hist[S.idx].to;
+  }
+
+  for (let vr = 0; vr < 8; vr++) {
+    for (let vc = 0; vc < 8; vc++) {
+      let br, bc, sqName;
+
+      if (!S.flip) {
+        // White at bottom: visual row 0 = rank 8 (ba row 0)
+        br     = vr;
+        bc     = vc;
+        sqName = FILES[vc] + (8 - vr);
+      } else {
+        // Black at bottom: visual row 0 = rank 1 (ba row 7)
+        br     = 7 - vr;
+        bc     = 7 - vc;
+        sqName = FILES[7 - vc] + (vr + 1);
+      }
+
+      const piece = ba[br][bc];
+      const dark  = (vr + vc) % 2 === 0;
+
+      const div = document.createElement('div');
+      div.className = 'sq ' + (dark ? 'dk' : 'lt');
+      if (sqName === fromSq) div.classList.add('hf');
+      if (sqName === toSq)   div.classList.add('ht');
+
+      if (piece) {
+        const sp = document.createElement('span');
+        sp.className = 'piece ' + piece.color;
+        sp.textContent = PC[piece.color + piece.type];
+        div.appendChild(sp);
+      }
+
+      el.appendChild(div);
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+//  NAV
+// ─────────────────────────────────────────
+function updateNav() {
+  const total = S.hist.length;
+  const i     = S.idx;
+
+  $('btn-prev').disabled = i < 0;
+  $('btn-next').disabled = i >= total - 1;
+
+  if (i === -1) {
+    $('movlbl').textContent = 'START';
+  } else {
+    const m   = S.hist[i];
+    const num = Math.floor(i / 2) + 1;
+    $('movlbl').textContent = m.color === 'w'
+      ? `${num}. ${m.san}`
+      : `${num}\u2026 ${m.san}`;
+  }
+
+  const isKey = i >= 0 && S.analysis?.moves[i]?.isKey;
+  $('key-lbl').textContent = isKey ? '★' : '';
+}
+
+$('btn-next').onclick    = advance;
+$('btn-prev').onclick    = stepBack;
+$('board-wrap').onclick  = advance;
+
+function advance() {
+  const total = S.hist.length;
+  if (S.idx >= total - 1) return;
+  S.idx++;
+  renderBoard();
+  updateNav();
+
+  const mv = S.analysis?.moves[S.idx];
+  if (mv?.comment) speak(mv.comment);
+
+  if (S.idx === total - 1 && S.analysis?.conclusion) {
+    const delay = (mv?.comment?.split(' ').length || 5) * 420 + 600;
+    setTimeout(() => speak(S.analysis.conclusion), delay);
+  }
+}
+
+function stepBack() {
+  if (S.idx < 0) return;
+  stopAudio();
+  S.idx--;
+  renderBoard();
+  updateNav();
+}
+
+// ─────────────────────────────────────────
+//  TTS — Kokoro via OpenRouter → Web Speech fallback
+// ─────────────────────────────────────────
+async function speak(text) {
+  if (!text) return;
+  stopAudio();
+  $('adot').classList.add('on');
+
+  if (S.orKey) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${S.orKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'hexgrad/kokoro-82m',
+          input: text,
+          voice: 'af_sky',
+          response_format: 'mp3'
+        })
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const aud  = new Audio(url);
+        S.curAudio = aud;
+        const done = () => { URL.revokeObjectURL(url); $('adot').classList.remove('on'); };
+        aud.onended = done;
+        aud.onerror = done;
+        await aud.play();
+        return;
+      }
+    } catch (_) { /* fall through to Web Speech */ }
+  }
+
+  // ── Web Speech fallback ──
+  if (!('speechSynthesis' in window)) {
+    $('adot').classList.remove('on');
+    return;
+  }
+  speechSynthesis.cancel();
+  const u  = new SpeechSynthesisUtterance(text);
+  u.rate   = 0.93;
+  u.pitch  = 1;
+  u.onend  = () => $('adot').classList.remove('on');
+  u.onerror = () => $('adot').classList.remove('on');
+  speechSynthesis.speak(u);
+}
+
+function stopAudio() {
+  if (S.curAudio) { S.curAudio.pause(); S.curAudio = null; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  $('adot').classList.remove('on');
+}
+
+// ─────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────
+show('s-settings');
+</script>
+</body>
+</html>

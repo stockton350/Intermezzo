@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Chess Coach</title>
+<title>Intermezzo</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -291,7 +291,7 @@ html, body {
 
 <!-- SETTINGS -->
 <div id="s-settings" class="screen">
-  <div class="logo">Chess Coach</div>
+  <div class="logo">Intermezzo</div>
   <div class="logo-sub">DeepSeek + Kokoro</div>
 
   <div class="field">
@@ -320,7 +320,7 @@ html, body {
 <!-- HOME -->
 <div id="s-home" class="screen hidden">
   <div class="home-hdr">
-    <h2>Chess Coach</h2>
+    <h2>Intermezzo</h2>
     <button class="icon-btn" id="btn-tosettings">⚙</button>
   </div>
   <textarea id="pgn" placeholder="Paste PGN here…&#10;&#10;[Event &quot;Live Chess&quot;]&#10;[White &quot;…&quot;]&#10;[Black &quot;…&quot;]&#10;&#10;1. e4 e5 2. Nf3 …"></textarea>
@@ -521,11 +521,11 @@ ${pgn}
 Return ONLY a valid JSON object (no markdown fences, no extra text) with this exact shape:
 {
   "opening": "Name of the opening",
-  "overview": "2-3 sentence spoken intro: name the opening, set the scene, mention what kind of game this turned out to be — tactical brawl, quiet positional grind, wild complications, etc. Make it engaging.",
+  "overview": "2-3 sentence spoken intro: name the opening, set the scene, mention what kind of game this turned out to be — tactical brawl, quiet positional grind, wild complications, etc. Make it engaging. Always end with: Let's analyze the game move by move.",
   "moves": [
     { "comment": "spoken comment for this move", "isKey": false }
   ],
-  "conclusion": "3-4 sentence spoken summary: what decided the game, what ${S.username} did well, what to take away. Make it feel like a post-game debrief.",
+  "conclusion": "2 sentence spoken closer: one sentence on what decided the game, one punchy takeaway for ${S.username} to remember.",
   "profile": "3-4 sentence coaching profile of ${S.username} based on this game"
 }
 

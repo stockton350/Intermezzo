@@ -88,6 +88,17 @@ html, body {
   transition: opacity .15s, transform .1s;
 }
 .primary:active { opacity: .85; transform: scale(.99); }
+.key-row { display: flex; gap: 8px; margin-top: 10px; }
+.key-btn {
+  flex: 1; padding: 13px 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px; color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px; cursor: pointer;
+  transition: all .2s; text-align: center;
+}
+.key-btn:active { opacity: .7; }
 
 /* ── HOME ── */
 #s-home {
@@ -315,6 +326,11 @@ html, body {
     </div>
   </div>
   <button class="primary" id="btn-save">Continue →</button>
+  <div class="key-row">
+    <button class="key-btn" id="btn-export">↓ Export Keys</button>
+    <button class="key-btn" id="btn-import">↑ Import Keys</button>
+  </div>
+  <input type="file" id="f-import" accept=".json" style="display:none">
 </div>
 
 <!-- HOME -->
@@ -436,6 +452,35 @@ $('btn-tosettings').onclick = () => {
     b.classList.toggle('on', b.dataset.v === S.tone);
   });
   show('s-settings');
+};
+
+$('btn-export').onclick = () => {
+  const data = { dsKey: $('f-ds').value.trim(), orKey: $('f-or').value.trim(), username: $('f-user').value.trim(), tone: S.tone };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'intermezzo-keys.json'; a.click();
+  URL.revokeObjectURL(url);
+};
+
+$('btn-import').onclick = () => $('f-import').click();
+
+$('f-import').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (d.dsKey)    { $('f-ds').value   = d.dsKey; }
+      if (d.orKey)    { $('f-or').value   = d.orKey; }
+      if (d.username) { $('f-user').value = d.username; }
+      if (d.tone)     { S.tone = d.tone; pv('.tone').forEach(b => b.classList.toggle('on', b.dataset.v === d.tone)); }
+      toast('Keys imported — tap Continue to save.');
+    } catch { toast('Invalid file.'); }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
 };
 
 // ─────────────────────────────────────────

@@ -371,7 +371,7 @@ const S = {
   games: [],
   // per-game
   positions: [], hist: [], analysis: null,
-  idx: -1, flip: false, curAudio: null
+  idx: -1, flip: false, curAudio: null, pendingOverview: null
 };
 
 // ─────────────────────────────────────────
@@ -649,9 +649,9 @@ function loadGame(pgn, analysis) {
     $('opp-info').innerHTML = `<strong>${wName}</strong>${wElo ? `<br>(${wElo})` : ''}`;
   }
 
+  S.pendingOverview = analysis.overview || `${analysis.opening}. Tap to begin.`;
   renderBoard();
   updateNav();
-  speak(analysis.overview || `${analysis.opening}. Tap to begin.`);
 }
 
 // ─────────────────────────────────────────
@@ -720,7 +720,7 @@ function updateNav() {
   $('btn-next').disabled = i >= total - 1;
 
   if (i === -1) {
-    $('movlbl').textContent = 'START';
+    $('movlbl').textContent = S.pendingOverview ? '▶ TAP' : 'START';
   } else {
     const m   = S.hist[i];
     const num = Math.floor(i / 2) + 1;
@@ -738,6 +738,11 @@ $('btn-prev').onclick    = stepBack;
 $('board-wrap').onclick  = advance;
 
 function advance() {
+  if (S.pendingOverview) {
+    speak(S.pendingOverview);
+    S.pendingOverview = null;
+    return;
+  }
   const total = S.hist.length;
   if (S.idx >= total - 1) return;
   S.idx++;

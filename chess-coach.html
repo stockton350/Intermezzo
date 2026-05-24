@@ -512,8 +512,8 @@ async function fetchAnalysis(pgn) {
     messages: [{
       role: 'user',
       content:
-`You are a chess coach reviewing a game for ${S.username} who played ${side}.
-Use ${toneMap[S.tone]}.
+`You are a chess coach and commentator reviewing a game for ${S.username} who played ${side}.
+Use ${toneMap[S.tone]}. Be human, warm, and occasionally witty — like a knowledgeable friend watching the game with them, not a robot reciting evaluations.
 
 PGN:
 ${pgn}
@@ -521,19 +521,23 @@ ${pgn}
 Return ONLY a valid JSON object (no markdown fences, no extra text) with this exact shape:
 {
   "opening": "Name of the opening",
+  "overview": "2-3 sentence spoken intro: name the opening, set the scene, mention what kind of game this turned out to be — tactical brawl, quiet positional grind, wild complications, etc. Make it engaging.",
   "moves": [
-    { "comment": "1-2 sentence spoken comment for this move, from ${S.username}'s perspective", "isKey": false }
+    { "comment": "spoken comment for this move", "isKey": false }
   ],
-  "conclusion": "2-3 sentence spoken game summary",
+  "conclusion": "3-4 sentence spoken summary: what decided the game, what ${S.username} did well, what to take away. Make it feel like a post-game debrief.",
   "profile": "3-4 sentence coaching profile of ${S.username} based on this game"
 }
 
-STRICT RULES:
-- moves array must contain exactly ${total} objects — one per half-move in order
-- Keep every comment SHORT (1-2 sentences) — it will be spoken aloud while watching the board
-- isKey must be boolean true for: blunders, brilliant moves, key sacrifices, major turning points
-- Key-move comments must start with "Key move — "
-- No text whatsoever outside the JSON object`
+RULES FOR MOVE COMMENTS:
+- One per half-move, exactly ${total} total, in order
+- Comments are spoken aloud while watching the board — keep them SHORT (1-2 sentences max)
+- Sound human: use phrases like "nice idea here", "oof, this is where things unravel", "clever — puts real pressure on", "both sides are just going for it"
+- Point out PATTERNS when you see them: repeated weaknesses, a tendency to trade pieces early, time pressure decisions, etc.
+- Occasional dry humor or personality is welcome — don't be bland
+- For routine moves in quiet positions, a brief observation is fine ("solid, keeps the tension")
+- isKey: true for blunders, brilliant moves, key sacrifices, turning points — those comments must start with "Key move — "
+- No text outside the JSON object`
     }]
   };
 
@@ -647,7 +651,7 @@ function loadGame(pgn, analysis) {
 
   renderBoard();
   updateNav();
-  speak(`${analysis.opening}. Tap to begin.`);
+  speak(analysis.overview || `${analysis.opening}. Tap to begin.`);
 }
 
 // ─────────────────────────────────────────

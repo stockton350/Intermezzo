@@ -228,8 +228,20 @@ html, body {
 #board-wrap {
   width: 100%; aspect-ratio: 1/1;
   flex-shrink: 0; cursor: pointer;
-  user-select: none;
+  user-select: none; position: relative;
 }
+.start-capsule {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--accent); border: none;
+  border-radius: 999px; padding: 14px 36px;
+  color: #fff; font-family: 'Space Mono', monospace;
+  font-size: 14px; font-weight: 700; letter-spacing: 1px;
+  cursor: pointer; z-index: 10;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  transition: opacity .15s, transform .1s;
+}
+.start-capsule:active { opacity: .85; transform: translate(-50%,-50%) scale(.97); }
 #board {
   width: 100%; height: 100%;
   display: grid;
@@ -374,6 +386,7 @@ html, body {
 
   <div id="board-wrap">
     <div id="board"></div>
+    <button id="btn-start" class="start-capsule hidden">▶ Start</button>
   </div>
 
   <div class="navbar">
@@ -437,6 +450,8 @@ pv('.tone').forEach(b => {
     pv('.tone').forEach(t => t.classList.remove('on'));
     b.classList.add('on');
     S.tone = b.dataset.v;
+    const saved = localStorage.getItem('iz_keys');
+    if (saved) { try { const d = JSON.parse(saved); d.tone = S.tone; localStorage.setItem('iz_keys', JSON.stringify(d)); } catch (_) {} }
   };
 });
 
@@ -447,6 +462,7 @@ $('btn-save').onclick = () => {
   if (!dk) return toast('DeepSeek API key is required.');
   if (!un) return toast('Enter your chess username.');
   S.dsKey = dk; S.orKey = ok; S.username = un;
+  localStorage.setItem('iz_keys', JSON.stringify({ dsKey: dk, orKey: ok, username: un, tone: S.tone }));
   show('s-home');
   refreshHome();
 };
@@ -717,7 +733,8 @@ function loadGame(pgn, analysis) {
     $('opp-info').innerHTML = `<strong>${wName}</strong>${wElo ? `<br>(${wElo})` : ''}`;
   }
 
-  S.pendingOverview = analysis.overview || `${analysis.opening}. Tap to begin.`;
+  S.pendingOverview = analysis.overview || `${analysis.opening}. Let's analyze the game move by move.`;
+  $('btn-start').classList.remove('hidden');
   renderBoard();
   updateNav();
 }
@@ -801,7 +818,7 @@ function updateNav() {
   $('btn-next').disabled = i >= total - 1;
 
   if (i === -1) {
-    $('movlbl').textContent = S.pendingOverview ? '▶ TAP' : 'START';
+    $('movlbl').textContent = 'START';
   } else {
     const m   = S.hist[i];
     const num = Math.floor(i / 2) + 1;
@@ -818,12 +835,14 @@ $('btn-next').onclick    = advance;
 $('btn-prev').onclick    = stepBack;
 $('board-wrap').onclick  = advance;
 
+$('btn-start').onclick = e => {
+  e.stopPropagation();
+  $('btn-start').classList.add('hidden');
+  if (S.pendingOverview) { speak(S.pendingOverview); S.pendingOverview = null; }
+};
+
 function advance() {
-  if (S.pendingOverview) {
-    speak(S.pendingOverview);
-    S.pendingOverview = null;
-    return;
-  }
+  if (S.pendingOverview) return; // must use Start button first
   const total = S.hist.length;
   if (S.idx >= total - 1) return;
   S.idx++;
@@ -831,11 +850,12 @@ function advance() {
   updateNav();
 
   const mv = S.analysis?.moves[S.idx];
-  if (mv?.comment) speak(mv.comment);
-
   if (S.idx === total - 1 && S.analysis?.conclusion) {
-    const delay = (mv?.comment?.split(' ').length || 5) * 420 + 600;
-    setTimeout(() => speak(S.analysis.conclusion), delay);
+    const conclude = () => speak(S.analysis.conclusion);
+    if (mv?.comment) speak(mv.comment, conclude);
+    else conclude();
+  } else if (mv?.comment) {
+    speak(mv.comment);
   }
 }
 
@@ -850,8 +870,8 @@ function stepBack() {
 // ─────────────────────────────────────────
 //  TTS — Kokoro via OpenRouter → Web Speech fallback
 // ─────────────────────────────────────────
-async function speak(text) {
-  if (!text) return;
+async function speak(text, onDone) {
+  if (!text) { if (onDone) onDone(); return; }
   stopAudio();
   $('adot').classList.add('on');
 
@@ -876,7 +896,7 @@ async function speak(text) {
         const url  = URL.createObjectURL(blob);
         const aud  = new Audio(url);
         S.curAudio = aud;
-        const done = () => { URL.revokeObjectURL(url); $('adot').classList.remove('on'); };
+        const done = () => { URL.revokeObjectURL(url); $('adot').classList.remove('on'); if (onDone) onDone(); };
         aud.onended = done;
         aud.onerror = done;
         await aud.play();
@@ -888,14 +908,15 @@ async function speak(text) {
   // ── Web Speech fallback ──
   if (!('speechSynthesis' in window)) {
     $('adot').classList.remove('on');
+    if (onDone) onDone();
     return;
   }
   speechSynthesis.cancel();
   const u  = new SpeechSynthesisUtterance(text);
   u.rate   = 0.93;
   u.pitch  = 1;
-  u.onend  = () => $('adot').classList.remove('on');
-  u.onerror = () => $('adot').classList.remove('on');
+  u.onend  = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
+  u.onerror = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
   speechSynthesis.speak(u);
 }
 
@@ -908,7 +929,20 @@ function stopAudio() {
 // ─────────────────────────────────────────
 //  BOOT
 // ─────────────────────────────────────────
-show('s-settings');
+(function () {
+  const saved = localStorage.getItem('iz_keys');
+  if (saved) {
+    try {
+      const d = JSON.parse(saved);
+      if (d.dsKey) { S.dsKey = d.dsKey; $('f-ds').value = d.dsKey; }
+      if (d.orKey) { S.orKey = d.orKey; $('f-or').value = d.orKey; }
+      if (d.username) { S.username = d.username; $('f-user').value = d.username; }
+      if (d.tone) { S.tone = d.tone; pv('.tone').forEach(b => b.classList.toggle('on', b.dataset.v === d.tone)); }
+      if (S.dsKey && S.username) { show('s-home'); refreshHome(); return; }
+    } catch (_) {}
+  }
+  show('s-settings');
+})();
 </script>
 </body>
 </html>

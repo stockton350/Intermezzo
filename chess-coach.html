@@ -824,10 +824,15 @@ function updateNav() {
   const i     = S.idx;
 
   $('btn-prev').disabled = i < 0;
-  $('btn-next').disabled = i >= total - 1;
+  $('btn-next').disabled = false;
 
   if (i === -1) {
     $('movlbl').textContent = 'START';
+  } else if (i === total - 1 && S.analysis?.conclusion) {
+    const m   = S.hist[i];
+    const num = Math.floor(i / 2) + 1;
+    const san = m.color === 'w' ? `${num}. ${m.san}` : `${num}\u2026 ${m.san}`;
+    $('movlbl').textContent = `${san} \u00b7\u00a0recap`;
   } else {
     const m   = S.hist[i];
     const num = Math.floor(i / 2) + 1;
@@ -856,21 +861,18 @@ $('btn-start').onclick = () => {
 };
 
 function advance() {
-  if (S.pendingOverview) return; // must use Start button first
+  if (S.pendingOverview) return;
   const total = S.hist.length;
-  if (S.idx >= total - 1) return;
+  if (S.idx >= total - 1) {
+    if (S.analysis?.conclusion) speak(S.analysis.conclusion);
+    return;
+  }
   S.idx++;
   renderBoard();
   updateNav();
 
   const mv = S.analysis?.moves[S.idx];
-  if (S.idx === total - 1 && S.analysis?.conclusion) {
-    const conclude = () => speak(S.analysis.conclusion);
-    if (mv?.comment) speak(mv.comment, conclude);
-    else conclude();
-  } else if (mv?.comment) {
-    speak(mv.comment);
-  }
+  if (mv?.comment) speak(mv.comment);
 }
 
 function stepBack() {

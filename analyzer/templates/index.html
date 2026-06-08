@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Analysis Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Space Mono', 'Courier New', monospace;
+    font-size: 14px;
+    padding: 24px;
+  }
+  h1 { font-size: 1.4rem; color: #a8d8a8; margin-bottom: 4px; }
+  .subtitle { color: #888; margin-bottom: 24px; font-size: 0.85rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+  .card {
+    background: #16213e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .card h2 { font-size: 0.9rem; color: #a8d8a8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .record { display: flex; gap: 24px; align-items: center; }
+  .record .stat { text-align: center; }
+  .record .stat .val { font-size: 2rem; font-weight: bold; }
+  .record .stat .lbl { font-size: 0.75rem; color: #888; }
+  .win { color: #a8d8a8; }
+  .loss { color: #e88; }
+  .draw { color: #aaa; }
+  canvas { max-width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th { text-align: left; color: #888; padding: 4px 8px; border-bottom: 1px solid #2a2a4a; }
+  td { padding: 5px 8px; border-bottom: 1px solid #1e1e3a; }
+  tr:hover td { background: #1e2a4e; }
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.75rem; }
+  .tag-blunder { background: #5a1a1a; color: #e88; }
+  .tag-mistake { background: #3a2a1a; color: #e8a; }
+  .tag-inaccuracy { background: #2a2a1a; color: #dd8; }
+  .tag-good { background: #1a3a1a; color: #8d8; }
+  .phase-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .phase-stat { flex: 1; min-width: 80px; background: #0f1929; border-radius: 6px; padding: 12px; text-align: center; }
+  .phase-stat .val { font-size: 1.4rem; font-weight: bold; color: #a8d8a8; }
+  .phase-stat .lbl { font-size: 0.7rem; color: #888; margin-top: 4px; }
+  .full-width { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<h1>Chess Analysis Dashboard</h1>
+<p class="subtitle">{{ summary.total_games }} games analyzed</p>
+
+<div class="grid">
+
+  <!-- Record -->
+  <div class="card">
+    <h2>Record</h2>
+    <div class="record">
+      <div class="stat"><div class="val win">{{ summary.record.wins }}</div><div class="lbl">Wins</div></div>
+      <div class="stat"><div class="val loss">{{ summary.record.losses }}</div><div class="lbl">Losses</div></div>
+      <div class="stat"><div class="val draw">{{ summary.record.draws }}</div><div class="lbl">Draws</div></div>
+    </div>
+    {% if summary.total_games > 0 %}
+    <div style="margin-top: 16px; font-size: 0.85rem; color: #888;">
+      Win rate: <span style="color:#a8d8a8">{{ "%.0f"|format(summary.record.wins / summary.total_games * 100) }}%</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Avg CPL by phase -->
+  <div class="card">
+    <h2>Avg Centipawn Loss by Phase</h2>
+    <div class="phase-row">
+      {% for p in ['opening', 'middlegame', 'endgame'] %}
+      <div class="phase-stat">
+        <div class="val">{{ summary.avg_centipawn_loss.get(p, 0) }}</div>
+        <div class="lbl">{{ p.capitalize() }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Blunders -->
+  <div class="card">
+    <h2>Blunders</h2>
+    <div style="margin-bottom: 12px; font-size: 0.85rem;">
+      Total: <strong style="color:#e88">{{ summary.blunder_frequency.total }}</strong>
+      &nbsp;|&nbsp; Per game: <strong style="color:#e88">{{ summary.blunder_frequency.per_game }}</strong>
+    </div>
+    <table>
+      <tr><th>By phase</th><th>Count</th></tr>
+      {% for p in ['opening', 'middlegame', 'endgame'] %}
+      <tr><td>{{ p.capitalize() }}</td><td>{{ summary.blunder_frequency.by_phase.get(p, 0) }}</td></tr>
+      {% endfor %}
+    </table>
+    <div style="margin-top: 12px;">
+      <table>
+        <tr><th>By color</th><th>Count</th></tr>
+        <tr><td>White</td><td>{{ summary.blunder_by_color.get('white', 0) }}</td></tr>
+        <tr><td>Black</td><td>{{ summary.blunder_by_color.get('black', 0) }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Centipawn loss by move number -->
+  <div class="card full-width">
+    <h2>Centipawn Loss by Move Number (avg across all games)</h2>
+    <canvas id="moveCplChart" height="80"></canvas>
+  </div>
+
+  <!-- Worst openings -->
+  <div class="card full-width">
+    <h2>Openings (sorted by avg centipawn loss)</h2>
+    <table>
+      <tr>
+        <th>Opening</th>
+        <th>Games</th>
+        <th>Win %</th>
+        <th>Avg CPL</th>
+      </tr>
+      {% for op in summary.worst_openings %}
+      <tr>
+        <td>{{ op.name }}</td>
+        <td>{{ op.games }}</td>
+        <td>{{ op.win_rate }}%</td>
+        <td>
+          {% if op.avg_cpl > 60 %}
+          <span class="tag tag-blunder">{{ op.avg_cpl }}</span>
+          {% elif op.avg_cpl > 40 %}
+          <span class="tag tag-mistake">{{ op.avg_cpl }}</span>
+          {% elif op.avg_cpl > 20 %}
+          <span class="tag tag-inaccuracy">{{ op.avg_cpl }}</span>
+          {% else %}
+          <span class="tag tag-good">{{ op.avg_cpl }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- Accuracy by game -->
+  <div class="card full-width">
+    <h2>Accuracy by Game</h2>
+    <canvas id="accuracyChart" height="80"></canvas>
+  </div>
+
+</div>
+
+<script>
+const moveCplData = {{ move_cpl | tojson }};
+const accuracyData = {{ summary.accuracy_by_game | tojson }};
+
+const chartDefaults = {
+  responsive: true,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#888', font: { family: 'Space Mono, monospace', size: 11 } }, grid: { color: '#2a2a4a' } },
+    y: { ticks: { color: '#888', font: { family: 'Space Mono, monospace', size: 11 } }, grid: { color: '#2a2a4a' } },
+  },
+};
+
+// CPL by move
+new Chart(document.getElementById('moveCplChart'), {
+  type: 'line',
+  data: {
+    labels: moveCplData.map(d => d.move),
+    datasets: [{
+      data: moveCplData.map(d => d.avg_cpl),
+      borderColor: '#e88',
+      backgroundColor: 'rgba(238,136,136,0.1)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+    }],
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      ...chartDefaults.scales,
+      y: { ...chartDefaults.scales.y, title: { display: true, text: 'Avg CPL', color: '#888' } },
+      x: { ...chartDefaults.scales.x, title: { display: true, text: 'Move Number', color: '#888' } },
+    },
+  },
+});
+
+// Accuracy by game
+new Chart(document.getElementById('accuracyChart'), {
+  type: 'bar',
+  data: {
+    labels: accuracyData.map((d, i) => `G${d.game_id}`),
+    datasets: [{
+      data: accuracyData.map(d => d.accuracy),
+      backgroundColor: accuracyData.map(d =>
+        d.result === 'win' ? 'rgba(168,216,168,0.7)' :
+        d.result === 'loss' ? 'rgba(238,136,136,0.7)' :
+        'rgba(160,160,160,0.5)'
+      ),
+      borderWidth: 0,
+    }],
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      ...chartDefaults.scales,
+      y: { ...chartDefaults.scales.y, min: 0, max: 100, title: { display: true, text: 'Accuracy %', color: '#888' } },
+    },
+  },
+});
+</script>
+
+</body>
+</html>

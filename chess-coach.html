@@ -1,3 +1,4 @@
+<!-- version: 2026-06-09-2 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -356,10 +357,20 @@ html, body {
 .mdot.mistake  { background: var(--orange); }
 .mdot.inaccuracy { background: var(--gold); opacity: .6; }
 .mdot.good-key { background: var(--green); }
+.mdot.has-comment { background: var(--accent); opacity: .6; }
 .mdot.current {
   box-shadow: 0 0 0 2px var(--text);
   transform: scale(1.2);
 }
+
+/* ── PLAY COMMENT BUTTON ── */
+#btn-play-comment {
+  background: none; border: none;
+  color: var(--accent); font-size: 18px;
+  cursor: pointer; padding: 4px 8px;
+  line-height: 1; transition: opacity .15s;
+}
+#btn-play-comment:active { opacity: .6; }
 
 /* ── ERROR TOAST ── */
 #toast {
@@ -406,6 +417,7 @@ html, body {
   <div class="key-row">
     <button class="key-btn" id="btn-export">↓ Export Keys</button>
     <button class="key-btn" id="btn-import">↑ Import Keys</button>
+    <button class="key-btn" id="btn-update">⟳ Update</button>
   </div>
   <input type="file" id="f-import" accept=".json" style="display:none">
 </div>
@@ -438,6 +450,7 @@ html, body {
 
   <div class="statusbar">
     <span id="key-lbl"></span>
+    <button id="btn-play-comment" class="hidden">▶</button>
     <div class="audiodot" id="adot"></div>
   </div>
 
@@ -515,7 +528,11 @@ function pgHeader(pgn, tag) {
 function parseAnnotations(pgn) {
   const results = [];
   // Strip header lines
-  const body = pgn.replace(/^\[.*\]\s*$/gm, '').trim();
+  let body = pgn.replace(/^\[.*\]\s*$/gm, '').trim();
+
+  // Strip variation branches (nested parens) — main-line only
+  let prev;
+  do { prev = body; body = body.replace(/\([^()]*\)/g, ''); } while (body !== prev);
 
   // Split on move tokens and capture comment blocks that follow them
   // Each "unit" is: optional move number+dots, a move SAN, then zero or more {...} blocks
@@ -613,6 +630,35 @@ $('btn-export').onclick = () => {
 };
 
 $('btn-import').onclick = () => $('f-import').click();
+
+let updatePending = false;
+$('btn-update').onclick = async () => {
+  if (updatePending) { location.reload(true); return; }
+  const btn = $('btn-update');
+  btn.textContent = '⟳ Checking…';
+  btn.disabled = true;
+  try {
+    const url = location.href.split('?')[0] + '?t=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
+    const html = await res.text();
+    const remoteM = html.match(/<!--\s*version:\s*([\w.-]+)\s*-->/);
+    const localM  = document.documentElement.outerHTML.match(/<!--\s*version:\s*([\w.-]+)\s*-->/);
+    const remote = remoteM ? remoteM[1] : null;
+    const local  = localM  ? localM[1]  : null;
+    if (remote && remote !== local) {
+      updatePending = true;
+      btn.textContent = '↑ Reload for update';
+      btn.disabled = false;
+    } else {
+      btn.textContent = '✓ Up to date';
+      setTimeout(() => { btn.textContent = '⟳ Update'; btn.disabled = false; }, 2500);
+    }
+  } catch {
+    btn.textContent = '⟳ Update';
+    btn.disabled = false;
+    toast('Could not check for updates.');
+  }
+};
 
 $('f-import').onchange = e => {
   const file = e.target.files[0];
@@ -1053,11 +1099,16 @@ function updateNav() {
 
   const mv = i >= 0 ? S.analysis?.moves[i] : null;
   if (mv?.isKey) {
-    $('key-lbl').textContent = mv.isGood ? '★' : '★';
+    $('key-lbl').textContent = '★';
     $('key-lbl').style.color = mv.isGood ? 'var(--green)' : 'var(--gold)';
   } else {
     $('key-lbl').textContent = '';
   }
+
+  // Play button: show when current move has a narration comment
+  const hasComment = !!(mv?.comment);
+  $('btn-play-comment').classList.toggle('hidden', !hasComment);
+  if (!hasComment) $('btn-play-comment').textContent = '▶';
 
   if (S.annotations) { updateEvalBar(); updateDotStrip(); }
 }
@@ -1075,12 +1126,15 @@ function buildDotStrip() {
 
     const ann = anns && anns[i];
     const mv  = moves && moves[i];
+    const hasComment = !!(mv && mv.comment);
     if (mv && mv.isKey && mv.isGood) {
       dot.classList.add('good-key');
     } else if (ann && ann.classification === 'blunder') {
       dot.classList.add('blunder');
     } else if (ann && ann.classification === 'mistake') {
       dot.classList.add('mistake');
+    } else if (hasComment) {
+      dot.classList.add('has-comment');
     } else if (ann && ann.classification === 'inaccuracy') {
       dot.classList.add('inaccuracy');
     }
@@ -1123,14 +1177,24 @@ function jumpTo(targetIdx) {
   updateNav();
   updateEvalBar();
   updateDotStrip();
-  // Play narration if key moment
-  const mv = S.analysis?.moves[S.idx];
-  if (mv?.isKey && mv?.comment) speak(mv.comment);
 }
 
 $('btn-next').onclick    = advance;
 $('btn-prev').onclick    = stepBack;
 $('board-wrap').onclick  = advance;
+
+$('btn-play-comment').onclick = () => {
+  const btn = $('btn-play-comment');
+  if (S.curAudio || btn.textContent === '■') {
+    stopAudio();
+    btn.textContent = '▶';
+    return;
+  }
+  const mv = S.analysis?.moves[S.idx];
+  if (!mv?.comment) return;
+  btn.textContent = '■';
+  speak(mv.comment, () => { btn.textContent = '▶'; });
+};
 
 $('btn-start').onclick = () => {
   if (S.pendingOverview) { speak(S.pendingOverview); S.pendingOverview = null; }
@@ -1155,13 +1219,11 @@ function advance() {
   updateNav();
 
   const mv = S.analysis?.moves[S.idx];
-  if (S.annotations) {
-    // Annotated mode: voice only on key moments
-    if (mv?.isKey && mv?.comment) speak(mv.comment);
-  } else {
+  if (!S.annotations) {
     // Unannotated mode: voice on every move
     if (mv?.comment) speak(mv.comment);
   }
+  // Annotated mode: user taps play button — no auto-speak
 }
 
 function stepBack() {

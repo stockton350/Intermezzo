@@ -1,3 +1,4 @@
+<!-- version: 2026-06-09-3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -356,10 +357,23 @@ html, body {
 .mdot.mistake  { background: var(--orange); }
 .mdot.inaccuracy { background: var(--gold); opacity: .6; }
 .mdot.good-key { background: var(--green); }
+.mdot.has-comment { background: var(--accent); opacity: .6; }
 .mdot.current {
   box-shadow: 0 0 0 2px var(--text);
   transform: scale(1.2);
 }
+
+/* ── PLAY COMMENT BUTTON ── */
+#btn-play-comment {
+  width: 52px; height: 52px;
+  background: var(--accent);
+  border: none; border-radius: 50%;
+  color: #fff; font-size: 18px;
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+#btn-play-comment:active { opacity: .8; transform: scale(.94); }
 
 /* ── ERROR TOAST ── */
 #toast {
@@ -406,6 +420,7 @@ html, body {
   <div class="key-row">
     <button class="key-btn" id="btn-export">↓ Export Keys</button>
     <button class="key-btn" id="btn-import">↑ Import Keys</button>
+    <button class="key-btn" id="btn-update">⟳ Update</button>
   </div>
   <input type="file" id="f-import" accept=".json" style="display:none">
 </div>
@@ -460,7 +475,10 @@ html, body {
       <span id="movlbl">START</span>
       <button id="btn-start" class="start-capsule hidden">▶ Start</button>
     </div>
-    <button class="nbtn" id="btn-next">→</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button id="btn-play-comment" class="hidden">▶</button>
+      <button class="nbtn" id="btn-next">→</button>
+    </div>
   </div>
 </div>
 
@@ -515,7 +533,11 @@ function pgHeader(pgn, tag) {
 function parseAnnotations(pgn) {
   const results = [];
   // Strip header lines
-  const body = pgn.replace(/^\[.*\]\s*$/gm, '').trim();
+  let body = pgn.replace(/^\[.*\]\s*$/gm, '').trim();
+
+  // Strip variation branches (nested parens) — main-line only
+  let prev;
+  do { prev = body; body = body.replace(/\([^()]*\)/g, ''); } while (body !== prev);
 
   // Split on move tokens and capture comment blocks that follow them
   // Each "unit" is: optional move number+dots, a move SAN, then zero or more {...} blocks
@@ -613,6 +635,35 @@ $('btn-export').onclick = () => {
 };
 
 $('btn-import').onclick = () => $('f-import').click();
+
+let updatePending = false;
+$('btn-update').onclick = async () => {
+  if (updatePending) { location.reload(true); return; }
+  const btn = $('btn-update');
+  btn.textContent = '⟳ Checking…';
+  btn.disabled = true;
+  try {
+    const url = location.href.split('?')[0] + '?t=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
+    const html = await res.text();
+    const remoteM = html.match(/<!--\s*version:\s*([\w.-]+)\s*-->/);
+    const localM  = document.documentElement.outerHTML.match(/<!--\s*version:\s*([\w.-]+)\s*-->/);
+    const remote = remoteM ? remoteM[1] : null;
+    const local  = localM  ? localM[1]  : null;
+    if (remote && remote !== local) {
+      updatePending = true;
+      btn.textContent = '↑ Reload for update';
+      btn.disabled = false;
+    } else {
+      btn.textContent = '✓ Up to date';
+      setTimeout(() => { btn.textContent = '⟳ Update'; btn.disabled = false; }, 2500);
+    }
+  } catch {
+    btn.textContent = '⟳ Update';
+    btn.disabled = false;
+    toast('Could not check for updates.');
+  }
+};
 
 $('f-import').onchange = e => {
   const file = e.target.files[0];
@@ -719,7 +770,7 @@ async function fetchAnalysis(pgn) {
       const clr  = mv.color === 'w' ? 'White' : 'Black';
       const san  = mv.san;
       const best = ann.bestMove ? `, best was ${ann.bestMove}` : '';
-      flaggedLines.push(`  Move ${num} (${clr}, ${san}): ${ann.classification.toUpperCase()}${best}`);
+      flaggedLines.push(`  moveIndex=${i}  Move ${num} (${clr}, ${san}): ${ann.classification.toUpperCase()}${best}`);
     });
     const flaggedTable = flaggedLines.join('\n') || '  (none flagged)';
 
@@ -751,7 +802,8 @@ Return ONLY valid JSON (no markdown fences):
   "profile": "3-4 sentence coaching profile of ${S.username}"
 }
 
-moveIndex is 0-based (half-move number in the game).
+CRITICAL: moveIndex must exactly match the "moveIndex=N" value shown in the engine table above.
+Do NOT use the full move number (1, 2, 3…) — use the moveIndex=N value from the table.
 isGood: true for well-played moves, false for mistakes/blunders.
 
 SPEECH RULES — narration is spoken aloud by TTS:
@@ -1053,11 +1105,16 @@ function updateNav() {
 
   const mv = i >= 0 ? S.analysis?.moves[i] : null;
   if (mv?.isKey) {
-    $('key-lbl').textContent = mv.isGood ? '★' : '★';
+    $('key-lbl').textContent = '★';
     $('key-lbl').style.color = mv.isGood ? 'var(--green)' : 'var(--gold)';
   } else {
     $('key-lbl').textContent = '';
   }
+
+  // Play button: only in annotated mode, only when current move has a comment
+  const hasComment = !!(S.annotations && mv?.comment);
+  $('btn-play-comment').classList.toggle('hidden', !hasComment);
+  if (!hasComment) $('btn-play-comment').textContent = '▶';
 
   if (S.annotations) { updateEvalBar(); updateDotStrip(); }
 }
@@ -1075,12 +1132,15 @@ function buildDotStrip() {
 
     const ann = anns && anns[i];
     const mv  = moves && moves[i];
+    const hasComment = !!(mv && mv.comment);
     if (mv && mv.isKey && mv.isGood) {
       dot.classList.add('good-key');
     } else if (ann && ann.classification === 'blunder') {
       dot.classList.add('blunder');
     } else if (ann && ann.classification === 'mistake') {
       dot.classList.add('mistake');
+    } else if (hasComment) {
+      dot.classList.add('has-comment');
     } else if (ann && ann.classification === 'inaccuracy') {
       dot.classList.add('inaccuracy');
     }
@@ -1123,14 +1183,24 @@ function jumpTo(targetIdx) {
   updateNav();
   updateEvalBar();
   updateDotStrip();
-  // Play narration if key moment
-  const mv = S.analysis?.moves[S.idx];
-  if (mv?.isKey && mv?.comment) speak(mv.comment);
 }
 
 $('btn-next').onclick    = advance;
 $('btn-prev').onclick    = stepBack;
 $('board-wrap').onclick  = advance;
+
+$('btn-play-comment').onclick = () => {
+  const btn = $('btn-play-comment');
+  const mv = S.analysis?.moves[S.idx];
+  if (!mv?.comment) return;
+  if ($('adot').classList.contains('on')) {
+    stopAudio();
+    btn.textContent = '▶';
+    return;
+  }
+  btn.textContent = '■';
+  speak(mv.comment, () => { btn.textContent = '▶'; });
+};
 
 $('btn-start').onclick = () => {
   if (S.pendingOverview) { speak(S.pendingOverview); S.pendingOverview = null; }
@@ -1155,13 +1225,11 @@ function advance() {
   updateNav();
 
   const mv = S.analysis?.moves[S.idx];
-  if (S.annotations) {
-    // Annotated mode: voice only on key moments
-    if (mv?.isKey && mv?.comment) speak(mv.comment);
-  } else {
+  if (!S.annotations) {
     // Unannotated mode: voice on every move
     if (mv?.comment) speak(mv.comment);
   }
+  // Annotated mode: user taps play button — no auto-speak
 }
 
 function stepBack() {
@@ -1173,60 +1241,52 @@ function stepBack() {
 }
 
 // ─────────────────────────────────────────
-//  TTS — Kokoro via OpenRouter → Web Speech fallback
+//  TTS — AudioContext (Kokoro) or Web Speech
 // ─────────────────────────────────────────
-async function speak(text, onDone) {
+function speak(text, onDone) {
   if (!text) { if (onDone) onDone(); return; }
   stopAudio();
   $('adot').classList.add('on');
 
+  const cleanUp = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
+
   if (S.orKey) {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${S.orKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'hexgrad/kokoro-82m',
-          input: text,
-          voice: 'af_sky',
-          response_format: 'mp3'
-        })
+    fetch('https://openrouter.ai/api/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${S.orKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'hexgrad/kokoro-82m', input: text, voice: 'af_sky', response_format: 'mp3' })
+    })
+    .then(r => r.ok ? r.arrayBuffer() : Promise.reject('api-error'))
+    .then(buf => {
+      if (!$('adot').classList.contains('on')) return;
+      const ctx = S._actx || (S._actx = new (window.AudioContext || window.webkitAudioContext)());
+      return ctx.decodeAudioData(buf).then(decoded => {
+        if (!$('adot').classList.contains('on')) return;
+        const src = ctx.createBufferSource();
+        src.buffer = decoded;
+        src.connect(ctx.destination);
+        S.curAudio = src;
+        src.onended = cleanUp;
+        src.start(0);
       });
-
-      if (res.ok) {
-        const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const aud  = new Audio(url);
-        S.curAudio = aud;
-        const done = () => { URL.revokeObjectURL(url); $('adot').classList.remove('on'); if (onDone) onDone(); };
-        aud.onended = done;
-        aud.onerror = done;
-        await aud.play();
-        return;
-      }
-    } catch (_) { /* fall through to Web Speech */ }
-  }
-
-  // ── Web Speech fallback ──
-  if (!('speechSynthesis' in window)) {
-    $('adot').classList.remove('on');
-    if (onDone) onDone();
+    })
+    .catch(() => cleanUp());
     return;
   }
+
+  if (!('speechSynthesis' in window)) { cleanUp(); return; }
   speechSynthesis.cancel();
-  const u  = new SpeechSynthesisUtterance(text);
-  u.rate   = 0.93;
-  u.pitch  = 1;
-  u.onend  = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
-  u.onerror = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.93; u.pitch = 1;
+  u.onend = cleanUp; u.onerror = cleanUp;
   speechSynthesis.speak(u);
 }
 
 function stopAudio() {
-  if (S.curAudio) { S.curAudio.pause(); S.curAudio = null; }
+  if (S.curAudio) {
+    try { S.curAudio.stop(); } catch (_) {}
+    S.curAudio = null;
+  }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   $('adot').classList.remove('on');
 }
@@ -1235,6 +1295,14 @@ function stopAudio() {
 //  BOOT
 // ─────────────────────────────────────────
 (function () {
+  // Unlock AudioContext on first user gesture so async Kokoro playback works on iOS
+  const unlockCtx = () => {
+    if (!S._actx) S._actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (S._actx.state === 'suspended') S._actx.resume();
+  };
+  document.addEventListener('touchstart', unlockCtx, { passive: true });
+  document.addEventListener('click', unlockCtx, { passive: true });
+
   const saved = localStorage.getItem('iz_keys');
   if (saved) {
     try {

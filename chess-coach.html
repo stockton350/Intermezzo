@@ -770,7 +770,7 @@ async function fetchAnalysis(pgn) {
       const clr  = mv.color === 'w' ? 'White' : 'Black';
       const san  = mv.san;
       const best = ann.bestMove ? `, best was ${ann.bestMove}` : '';
-      flaggedLines.push(`  Move ${num} (${clr}, ${san}): ${ann.classification.toUpperCase()}${best}`);
+      flaggedLines.push(`  moveIndex=${i}  Move ${num} (${clr}, ${san}): ${ann.classification.toUpperCase()}${best}`);
     });
     const flaggedTable = flaggedLines.join('\n') || '  (none flagged)';
 
@@ -802,7 +802,8 @@ Return ONLY valid JSON (no markdown fences):
   "profile": "3-4 sentence coaching profile of ${S.username}"
 }
 
-moveIndex is 0-based (half-move number in the game).
+CRITICAL: moveIndex must exactly match the "moveIndex=N" value shown in the engine table above.
+Do NOT use the full move number (1, 2, 3…) — use the moveIndex=N value from the table.
 isGood: true for well-played moves, false for mistakes/blunders.
 
 SPEECH RULES — narration is spoken aloud by TTS:
@@ -1240,56 +1241,57 @@ function stepBack() {
 }
 
 // ─────────────────────────────────────────
-//  TTS — Kokoro via OpenRouter → Web Speech fallback
+//  TTS — Web Speech (sync) + Kokoro upgrade
 // ─────────────────────────────────────────
-async function speak(text, onDone) {
+function speak(text, onDone) {
   if (!text) { if (onDone) onDone(); return; }
   stopAudio();
   $('adot').classList.add('on');
 
-  if (S.orKey) {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${S.orKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'hexgrad/kokoro-82m',
-          input: text,
-          voice: 'af_sky',
-          response_format: 'mp3'
-        })
-      });
+  const cleanUp = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
 
-      if (res.ok) {
-        const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const aud  = new Audio(url);
-        S.curAudio = aud;
-        const done = () => { URL.revokeObjectURL(url); $('adot').classList.remove('on'); if (onDone) onDone(); };
-        aud.onended = done;
-        aud.onerror = done;
-        await aud.play();
-        return;
-      }
-    } catch (_) { /* fall through to Web Speech */ }
+  // ── Always start Web Speech synchronously (required on iOS for user-gesture) ──
+  let wsActive = false;
+  let wsUtterance = null;
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+    wsUtterance = new SpeechSynthesisUtterance(text);
+    wsUtterance.rate  = 0.93;
+    wsUtterance.pitch = 1;
+    wsUtterance.onend   = cleanUp;
+    wsUtterance.onerror = cleanUp;
+    speechSynthesis.speak(wsUtterance);
+    wsActive = true;
   }
 
-  // ── Web Speech fallback ──
-  if (!('speechSynthesis' in window)) {
-    $('adot').classList.remove('on');
-    if (onDone) onDone();
+  if (!S.orKey) {
+    if (!wsActive) cleanUp();
     return;
   }
-  speechSynthesis.cancel();
-  const u  = new SpeechSynthesisUtterance(text);
-  u.rate   = 0.93;
-  u.pitch  = 1;
-  u.onend  = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
-  u.onerror = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
-  speechSynthesis.speak(u);
+
+  // ── Try Kokoro in parallel; if it arrives, upgrade ──
+  fetch('https://openrouter.ai/api/v1/audio/speech', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${S.orKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'hexgrad/kokoro-82m', input: text, voice: 'af_sky', response_format: 'mp3' })
+  })
+  .then(r => r.ok ? r.blob() : Promise.reject())
+  .then(blob => {
+    // Only switch to Kokoro if audio is still actively playing
+    if (!$('adot').classList.contains('on')) return;
+    // Silence Web Speech
+    if (wsUtterance) { wsUtterance.onend = null; wsUtterance.onerror = null; }
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    // Play Kokoro
+    const url = URL.createObjectURL(blob);
+    const aud = new Audio(url);
+    S.curAudio = aud;
+    const kdone = () => { URL.revokeObjectURL(url); cleanUp(); };
+    aud.onended = kdone;
+    aud.onerror = kdone;
+    aud.play().catch(kdone);
+  })
+  .catch(() => {}); // Kokoro failed — Web Speech already running, no action needed
 }
 
 function stopAudio() {

@@ -1271,9 +1271,9 @@ function speak(text, onDone) {
       const kdone = () => { URL.revokeObjectURL(url); cleanUp(); };
       aud.onended = kdone;
       aud.onerror = kdone;
-      aud.play().catch(() => { S.curAudio = null; doWebSpeech(); });
+      aud.play().catch(() => { S.curAudio = null; cleanUp(); });
     })
-    .catch(() => doWebSpeech());
+    .catch(() => cleanUp());
     return;
   }
 

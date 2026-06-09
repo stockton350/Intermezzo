@@ -1250,48 +1250,43 @@ function speak(text, onDone) {
 
   const cleanUp = () => { $('adot').classList.remove('on'); if (onDone) onDone(); };
 
-  // ── Always start Web Speech synchronously (required on iOS for user-gesture) ──
-  let wsActive = false;
-  let wsUtterance = null;
-  if ('speechSynthesis' in window) {
-    speechSynthesis.cancel();
-    wsUtterance = new SpeechSynthesisUtterance(text);
-    wsUtterance.rate  = 0.93;
-    wsUtterance.pitch = 1;
-    wsUtterance.onend   = cleanUp;
-    wsUtterance.onerror = cleanUp;
-    speechSynthesis.speak(wsUtterance);
-    wsActive = true;
-  }
+  if (S.orKey) {
+    // ── Kokoro preferred: fetch first, fall back to Web Speech only on failure ──
+    // Pre-unlock audio on iOS by creating a silent Audio and playing it synchronously
+    const unlock = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAA' +
+      'EAAQAAwF0AAIC7AAACABAAZGF0YQAAAAA=');
+    unlock.play().catch(() => {});
 
-  if (!S.orKey) {
-    if (!wsActive) cleanUp();
+    fetch('https://openrouter.ai/api/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${S.orKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'hexgrad/kokoro-82m', input: text, voice: 'af_sky', response_format: 'mp3' })
+    })
+    .then(r => r.ok ? r.blob() : Promise.reject())
+    .then(blob => {
+      if (!$('adot').classList.contains('on')) return;
+      const url = URL.createObjectURL(blob);
+      const aud = new Audio(url);
+      S.curAudio = aud;
+      const kdone = () => { URL.revokeObjectURL(url); cleanUp(); };
+      aud.onended = kdone;
+      aud.onerror = kdone;
+      aud.play().catch(() => { S.curAudio = null; doWebSpeech(); });
+    })
+    .catch(() => doWebSpeech());
     return;
   }
 
-  // ── Try Kokoro in parallel; if it arrives, upgrade ──
-  fetch('https://openrouter.ai/api/v1/audio/speech', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${S.orKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'hexgrad/kokoro-82m', input: text, voice: 'af_sky', response_format: 'mp3' })
-  })
-  .then(r => r.ok ? r.blob() : Promise.reject())
-  .then(blob => {
-    // Only switch to Kokoro if audio is still actively playing
-    if (!$('adot').classList.contains('on')) return;
-    // Silence Web Speech
-    if (wsUtterance) { wsUtterance.onend = null; wsUtterance.onerror = null; }
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
-    // Play Kokoro
-    const url = URL.createObjectURL(blob);
-    const aud = new Audio(url);
-    S.curAudio = aud;
-    const kdone = () => { URL.revokeObjectURL(url); cleanUp(); };
-    aud.onended = kdone;
-    aud.onerror = kdone;
-    aud.play().catch(kdone);
-  })
-  .catch(() => {}); // Kokoro failed — Web Speech already running, no action needed
+  doWebSpeech();
+
+  function doWebSpeech() {
+    if (!('speechSynthesis' in window)) { cleanUp(); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.93; u.pitch = 1;
+    u.onend = cleanUp; u.onerror = cleanUp;
+    speechSynthesis.speak(u);
+  }
 }
 
 function stopAudio() {

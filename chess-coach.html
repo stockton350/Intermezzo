@@ -1190,13 +1190,13 @@ $('board-wrap').onclick  = advance;
 
 $('btn-play-comment').onclick = () => {
   const btn = $('btn-play-comment');
-  if (S.curAudio || btn.textContent === '■') {
+  const mv = S.analysis?.moves[S.idx];
+  if (!mv?.comment) return;
+  if ($('adot').classList.contains('on')) {
     stopAudio();
     btn.textContent = '▶';
     return;
   }
-  const mv = S.analysis?.moves[S.idx];
-  if (!mv?.comment) return;
   btn.textContent = '■';
   speak(mv.comment, () => { btn.textContent = '▶'; });
 };
